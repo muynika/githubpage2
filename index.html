@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Te Amo Australia - Corazón Matemático Normal</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    height: 100vh;
+    background: linear-gradient(180deg, #0a0a0a 0%, #330000 80%, #000000 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  canvas {
+    position: absolute;
+    top: 0; left: 0;
+    display: block;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+<audio id="heartbeatSound" src="latido.mp3" preload="auto"></audio>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let stars = [];
+let ripples = [];
+let particles = [];
+const sound = document.getElementById("heartbeatSound");
+
+let scale = 1;
+let growing = true;
+
+const topText = "TE AMO";
+const bottomText = "AUSTRALIA";
+
+let topTextIndex = 0;
+let bottomTextIndex = 0;
+
+let topTextComplete = false;
+let bottomTextComplete = false;
+
+let textTimer = 0;
+const textSpeed = 150; // ms per letter
+
+const animatedLetters = [];
+for (let i = 0; i < topText.length + bottomText.length; i++) animatedLetters.push(null);
+
+// Crear estrellas
+class Star {
+  constructor(x, y, r, baseAlpha) {
+    this.x = x;
+    this.y = y;
+    this.r = r;
+    this.baseAlpha = baseAlpha;
+    this.alpha = baseAlpha;
+    this.alphaDir = 0.01 + Math.random() * 0.02;
+  }
+  update() {
+    this.alpha += this.alphaDir;
+    if(this.alpha >= 1 || this.alpha <= this.baseAlpha) this.alphaDir *= -1;
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${this.alpha.toFixed(2)})`;
+    ctx.fill();
+  }
+}
+for(let i=0; i<150; i++){
+  stars.push(new Star(
+    Math.random()*canvas.width,
+    Math.random()*canvas.height,
+    Math.random()*1.5 + 0.3,
+    0.2 + Math.random()*0.5
+  ));
+}
+
+function drawStars(){
+  stars.forEach(s => {
+    s.update();
+    s.draw();
+  });
+}
+
+// Partículas
+class Particle {
+  constructor(x, y){
+    this.x = x + (Math.random() - 0.5) * 60;
+    this.y = y + (Math.random() - 0.5) * 80;
+    this.radius = Math.random() * 2 + 1;
+    this.alpha = 1;
+    this.speedY = -0.5 - Math.random();
+    this.life = 100 + Math.random() * 50;
+    this.age = 0;
+  }
+  update(){
+    this.y += this.speedY;
+    this.age++;
+    this.alpha = Math.max(0, 1 - this.age / this.life);
+  }
+  draw(){
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255, 100, 100, ${this.alpha.toFixed(2)})`;
+    ctx.shadowColor = "rgba(255, 50, 50, 0.7)";
+    ctx.shadowBlur = 10;
+    ctx.fill();
+  }
+}
+function createParticles(x,y){
+  for(let i=0; i<3; i++){
+    particles.push(new Particle(x,y));
+  }
+}
+function updateParticles(){
+  for(let i=particles.length-1; i>=0; i--){
+    let p = particles[i];
+    p.update();
+    if(p.alpha <= 0) particles.splice(i,1);
+  }
+}
+function drawParticles(){
+  particles.forEach(p => p.draw());
+}
+
+// Dibujar el corazón usando la fórmula matemática adaptada
+function drawHeartFormula(cx, cy, size){
+  const stepX = 0.05 / size;
+  const stepY = 0.05 / size;
+  
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(1, -1);  // <-- Aquí volteamos verticalmente
+  
+  ctx.scale(size*80, size*80);
+  ctx.fillStyle = "red";
+  ctx.shadowColor = "rgba(255,0,0,0.7)";
+  ctx.shadowBlur = 8;
+
+  for(let y = 1.3; y >= -1.1; y -= stepY){
+    for(let x = -2; x < 1.4; x += stepX){
+      let val = Math.pow(x*x + y*y - 1, 3) - x*x*y*y*y;
+      if(val <= 0){
+        ctx.beginPath();
+        ctx.arc(x, y, 0.03, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+// Texto animado
+function drawAnimatedLetter(char, x, y, index, startTime, currentTime) {
+  const colors = ["red", "white", "red", "white", "red"];
+  const elapsed = currentTime - startTime;
+
+  const cycle = 1000;
+  const cycleProgress = (elapsed % cycle) / cycle;
+
+  const alpha = 0.5 + 0.5 * Math.sin(cycleProgress * 2 * Math.PI);
+  const scale = 0.85 + 0.25 * Math.sin(cycleProgress * 2 * Math.PI);
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha = alpha;
+  ctx.scale(scale, scale);
+  ctx.fillStyle = colors[index % colors.length];
+
+  ctx.shadowColor = `rgba(255, 50, 50, ${alpha.toFixed(2)})`;
+  ctx.shadowBlur = 15;
+
+  ctx.font = "bold 110px monospace";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+  ctx.fillText(char, 0, 0);
+  ctx.restore();
+}
+
+function drawPatternTextAnimated(text, xStart, y, maxIndex, currentTime, offset){
+  const letterSpacing = 70;
+  for(let i=0; i<maxIndex && i<text.length; i++){
+    const animIndex = offset + i;
+    if(!animatedLetters[animIndex]){
+      animatedLetters[animIndex] = currentTime;
+    }
+    drawAnimatedLetter(text[i], xStart + i*letterSpacing, y, i, animatedLetters[animIndex], currentTime);
+  }
+}
+
+function drawRipples(){
+  ripples.forEach((r,i)=>{
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, r.radius, 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(255,0,0,${r.alpha})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    r.radius += 3;
+    r.alpha -= 0.02;
+    if(r.alpha <= 0) ripples.splice(i,1);
+  });
+}
+
+function animate(time=0){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  drawStars();
+  drawRipples();
+  updateParticles();
+  drawParticles();
+
+  if(!topTextComplete){
+    if(time - textTimer > textSpeed){
+      topTextIndex++;
+      textTimer = time;
+      if(topTextIndex >= topText.length){
+        topTextComplete = true;
+      }
+    }
+  } else if(!bottomTextComplete){
+    if(time - textTimer > textSpeed){
+      bottomTextIndex++;
+      textTimer = time;
+      if(bottomTextIndex >= bottomText.length){
+        bottomTextComplete = true;
+      }
+    }
+  }
+
+  const topX = canvas.width/2 - ((topText.length-1)*70)/2;
+  const bottomX = canvas.width/2 - ((bottomText.length-1)*70)/2;
+
+  drawPatternTextAnimated(topText, topX, canvas.height/2 - 220, topTextIndex, time, 0);
+  drawPatternTextAnimated(bottomText, bottomX, canvas.height/2 + 220, bottomTextIndex, time, topText.length);
+
+  if(growing){
+    scale += 0.005;
+    if(scale >= 1.2) growing = false;
+  } else {
+    scale -= 0.005;
+    if(scale <= 1) growing = true;
+  }
+  
+  drawHeartFormula(canvas.width/2, canvas.height/2 + 30, scale);
+
+  if(Math.random() < 0.08) createParticles(canvas.width/2, canvas.height/2);
+
+  requestAnimationFrame(animate);
+}
+
+// Heartbeat sound and ripple effect every second
+setInterval(()=>{
+  sound.currentTime = 0;
+  sound.play();
+  ripples.push({x: canvas.width/2, y: canvas.height/2, radius: 120, alpha: 0.6});
+}, 1000);
+
+animate();
+
+</script>
+
+</body>
+</html>
